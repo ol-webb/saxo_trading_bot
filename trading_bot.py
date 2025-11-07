@@ -4,10 +4,13 @@ import sqlite3
 import pandas as pd
 import numpy as np
 import sys
+import requests
 from pathlib import Path
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import GetOrdersRequest
 from alpaca.trading.enums import QueryOrderStatus
+from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest
+from alpaca.trading.enums import OrderSide, TimeInForce
 
 # Add private directory to Python path (parent of core_logic package)
 private_path = Path(__file__).resolve().parents[1] / "private"
@@ -71,11 +74,11 @@ _______________________________________
 """
 class TradingBot:
 
-    def __init__(self, thresholds=None):
+    def __init__(self, thresholds=None, buy_quantity=1):
 
         self.signalengine = SignalEngine(refresh_rate=10, thresholds=thresholds)
         self.database_path = DATABASE_PATH
-
+        self.buy_quantity = buy_quantity
     
     # ======================= #
     # Refresh Holdings Table  #
@@ -109,7 +112,8 @@ class TradingBot:
 
                 qty = order.qty
                 side = order.side._value_
-                return side, qty
+                orderid = str(order.id)
+                return side, qty, orderid
         return None, None
 
 
@@ -129,8 +133,46 @@ class TradingBot:
         return side, qty
 
 
-    def place_market_order(self):
-        pass
+    def place_market_order(self, ticker, side, quantity):
+        """
+        We use DAY orders, since GTC is not accepted for fractional quantities
+
+        caveat with day orders: if the order is placed after market close, it will be cancelled at end of day
+        however, if the signal remains BUY, then the order will be placed again.
+        in short: there will be some cases where orders are closed, but they will be re-placed after closed.
+        """ 
+
+        trading_client = TradingClient(ALPACA_KEY, ALPACA_SECRET)
+
+        if side == 'buy':
+            s = OrderSide.BUY
+        elif side == 'sell':
+            s = OrderSide.SELL
+        else:
+            raise ValueError(f"Invalid side: {side}")
+
+        market_order_data = MarketOrderRequest(
+                    symbol=ticker,
+                    qty=quantity,
+                    side=s,
+                    time_in_force=TimeInForce.DAY
+                    )
+
+        order = trading_client.submit_order(
+            order_data=market_order_data
+        )
+        return order
+
+
+    def cancel_order(self, ticker):
+
+        # first get open orders and the order id for that asset
+        # performance wise, not best to call all open orders, but we likely wont cancel orders often
+        orders = self.get_all_open_orders()
+        side, qty, orderid  = self.get_asset_pending_orders(orders, ticker)
+
+        trading_client = TradingClient(ALPACA_KEY, ALPACA_SECRET)
+        trading_client.cancel_order_by_id(order_id = orderid)
 
 
     # ======================= #
@@ -235,55 +277,64 @@ class TradingBot:
     #  After refreshing position states and signals, as above
     #  these methods place relevant orders to sync position state + signal
 
-    def reconcile_asset_orders_and_holdings(self, ticker):
+    def reconcile_asset_orders_and_holdings(self, ticker, buy_quantity):
 
         con = sqlite3.connect(DATABASE_PATH)
         df = pd.read_sql_query("SELECT * FROM holdings", con)
         con.close()
 
-        row = df[df['cik_ticker'] == ticker]
-        position_state = row['position_state'].values[0]
-        signal = row['signal'].values[0]
-        quantity_bought = row['quantity_bought'].values[0]
+        try:
+            row = df[df['cik_ticker'] == ticker]
+            position_state = row['position_state'].values[0]
+            signal = row['signal'].values[0]
+            quantity_bought = row['quantity_bought'].values[0]
+        except Exception as e:
+            print(f"Error in extracting data for {ticker}")
+            return
 
         if signal == 'BUY':
 
             if position_state in ['OPEN', 'OPENING', 'PARTIAL FILL', 'FIXING_SHORT']:
                 return
             elif position_state == 'CLOSED':
-                #place order
-                return
+                self.place_market_order(ticker, 'buy', buy_quantity)
             elif position_state == 'CLOSING':
-                #cancel order + place order
+                self.cancel_order(ticker)
+                self.place_market_order(ticker, 'buy', buy_quantity)
             elif position_state == 'ERROR':
-                # do something
+                print(f"Error in reconcile_asset_orders_and_holdings for {ticker}")
+                return
 
         elif signal == 'HOLD':
 
             if position_state in ['OPEN', 'CLOSED', 'FIXING_SHORT']:
                 return
             elif position_state in ['OPENING', 'PARTIAL FILL']:
-                # cancel order
+                self.cancel_order(ticker)
             elif position_state == 'CLOSING':
-                # cancel order
+                self.cancel_order(ticker)
             elif position_state == 'ERROR':
-                # do something
+                print(f"Error in reconcile_asset_orders_and_holdings for {ticker}")
+                return
             
         elif signal == 'SELL':
 
             if position_state in ['CLOSED', 'CLOSING', 'FIXING_SHORT']:
                 return
             elif position_state == 'OPEN':
-                # place sell order
+                self.place_market_order(ticker, 'sell', buy_quantity)
             elif position_state == 'OPENING':
-                # cancel order
+                self.cancel_order(ticker)
             elif position_state == 'PARTIAL FILL':
-                # cancel order + sell
+                self.cancel_order(ticker)
+                self.place_market_order(ticker, 'sell', buy_quantity)
             elif position_state == 'ERROR':
-                # do something
+                print(f"Error in reconcile_asset_orders_and_holdings for {ticker}")
+                return
         
         else:
-            # dunno mate
+            print(f"Error in reconcile_asset_orders_and_holdings for {ticker}")
+            return
 
 
 
@@ -291,7 +342,18 @@ class TradingBot:
 
 
     def reconcile_table_orders_and_holdings(self):
-        pass
+        """
+        Iterate through whole table and reconcile position state + signal for each asset"""
+
+        con = sqlite3.connect(DATABASE_PATH)
+        df = pd.read_sql_query("SELECT * FROM holdings", con)
+        con.close()
+
+        for index, row in df.iterrows():
+            ticker = row['cik_ticker']
+            buy_quantity = row['quantity_bought']
+            print(ticker, buy_quantity)
+            self.reconcile_asset_orders_and_holdings(ticker, self.buy_quantity)
 
 
     # ======================= #
