@@ -3,14 +3,28 @@ import os
 import sqlite3
 import pandas as pd
 import numpy as np
+import math
 import sys
 import requests
 from pathlib import Path
+from typing import Optional
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import GetOrdersRequest
 from alpaca.trading.enums import QueryOrderStatus
 from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
+from alpaca.data.historical.stock import StockHistoricalDataClient
+from alpaca.data.requests import (
+    StockSnapshotRequest,
+    StockLatestTradeRequest,
+    StockLatestQuoteRequest,
+    StockBarsRequest,
+)
+from alpaca.data.enums import DataFeed
+from alpaca.data.timeframe import TimeFrame
+from datetime import datetime, timedelta, timezone
+
+
 
 # Add private directory to Python path (parent of core_logic package)
 private_path = Path(__file__).resolve().parents[1] / "private"
@@ -74,11 +88,12 @@ _______________________________________
 """
 class TradingBot:
 
-    def __init__(self, thresholds=None, buy_quantity=1):
+    def __init__(self, thresholds=None, buy_quantity=100, paper=True):
 
         self.signalengine = SignalEngine(refresh_rate=10, thresholds=thresholds)
         self.database_path = DATABASE_PATH
         self.buy_quantity = buy_quantity
+        self.paper = paper
     
     # ======================= #
     # Refresh Holdings Table  #
@@ -86,13 +101,117 @@ class TradingBot:
     def refresh_holdings_table_signals(self):
         self.signalengine.run_holdings_engine_refresh()
 
+    # use asset price and buy quantity to calculate the number of shares to buy
+    def get_order_size_quantity(self, ticker):
+        """order sizing, it is possible to do fractional trading on some occasions, although we will not do this"""
+
+        # check if the asset is tradable and fractionable
+        trading = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=self.paper)
+        asset = trading.get_asset(ticker)
+        syb = asset.symbol
+        tradable = asset.tradable
+        fractionable = asset.fractionable
+
+        if not tradable:
+            return None
+        
+        price = self.get_asset_price(ticker)
+        if price is None:
+            return 1
+
+        shares = self.buy_quantity / price # shares to buy = buy quantity / price per share
+
+        # if its not fractionable we need to round, if it is, just return as is
+        if fractionable:
+            return shares
+        else:
+            return math.ceil(shares)
+
 
     # ======================= #
     #     ALPACA METHODS      #
     # ======================= #
 
+    def get_asset_price(self,ticker: str):
+        """
+        Returns a ballpark last price for `ticker` (float) or None if unavailable.
+        - Prefers consolidated (15-min delayed) data for coverage on illiquid names.
+        - Falls back to IEX real-time, then to a recent minute bar.
+        Requires ALPACA_KEY and ALPACA_SECRET to be available in scope.
+        """
+
+        sym = (ticker or "").upper().strip()
+        if not sym:
+            return None
+
+        try:
+            client = StockHistoricalDataClient(ALPACA_KEY, ALPACA_SECRET)
+        except Exception:
+            return None
+
+        # Snapshot (fast path)
+        try:
+            snap = client.get_stock_snapshot(StockSnapshotRequest(symbol_or_symbols=sym))
+            ss = snap.get(sym) or (next(iter(snap.values())) if snap else None)
+            if ss:
+                if getattr(ss, "latest_trade", None) and ss.latest_trade.price is not None:
+                    return float(ss.latest_trade.price)
+                if getattr(ss, "latest_quote", None):
+                    bid = ss.latest_quote.bid_price
+                    ask = ss.latest_quote.ask_price
+                    if bid is not None and ask is not None:
+                        return float((bid + ask) / 2)
+                if getattr(ss, "minute_bar", None) and ss.minute_bar.close is not None:
+                    return float(ss.minute_bar.close)
+        except Exception:
+            pass  # move to explicit feed fallbacks
+
+        # Latest trade/quote with explicit feeds
+        for feed in (DataFeed.DELAYED_SIP, DataFeed.IEX):
+            # latest trade
+            try:
+                lt = client.get_stock_latest_trade(
+                    StockLatestTradeRequest(symbol_or_symbols=sym, feed=feed)
+                )
+                t = lt.get(sym)
+                if t and t.price is not None:
+                    return float(t.price)
+            except Exception:
+                pass
+            # latest quote → mid
+            try:
+                lq = client.get_stock_latest_quote(
+                    StockLatestQuoteRequest(symbol_or_symbols=sym, feed=feed)
+                )
+                q = lq.get(sym)
+                if q and q.bid_price is not None and q.ask_price is not None:
+                    return float((q.bid_price + q.ask_price) / 2)
+            except Exception:
+                pass
+
+        # Recent minute bar (≥15 min old → consolidated free on Basic)
+        try:
+            end = datetime.now(timezone.utc) - timedelta(minutes=16)
+            bars = client.get_stock_bars(
+                StockBarsRequest(
+                    symbol_or_symbols=sym,
+                    timeframe=TimeFrame.Minute,
+                    start=end - timedelta(hours=1),
+                    end=end,
+                    limit=1,
+                )
+            )
+            b = bars.get(sym)
+            if b:
+                return float(b[0].close)
+        except Exception:
+            pass
+
+        return None
+
+
     def get_all_open_orders(self):
-        trading_client = TradingClient(ALPACA_KEY, ALPACA_SECRET)
+        trading_client = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=self.paper)
 
         get_orders_data = GetOrdersRequest(
             status=QueryOrderStatus.OPEN,
@@ -119,7 +238,7 @@ class TradingBot:
 
     def get_asset_positions(self, ticker):
 
-        trading_client = TradingClient(ALPACA_KEY, ALPACA_SECRET)
+        trading_client = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=self.paper)
 
         try:
             position = trading_client.get_open_position(ticker)
@@ -133,7 +252,7 @@ class TradingBot:
         return side, qty
 
 
-    def place_market_order(self, ticker, side, quantity):
+    def place_market_order(self, *, ticker, side, quantity=None):
         """
         We use DAY orders, since GTC is not accepted for fractional quantities
 
@@ -142,7 +261,7 @@ class TradingBot:
         in short: there will be some cases where orders are closed, but they will be re-placed after closed.
         """ 
 
-        trading_client = TradingClient(ALPACA_KEY, ALPACA_SECRET)
+        trading_client = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=self.paper)
 
         if side == 'buy':
             s = OrderSide.BUY
@@ -151,9 +270,15 @@ class TradingBot:
         else:
             raise ValueError(f"Invalid side: {side}")
 
+        # if quantity is provided -> we are selling existing position and must use the provided quantity
+        if quantity is None:
+            quantity = self.get_order_size_quantity(ticker)
+        else:
+            quantity = int(quantity)
+
         market_order_data = MarketOrderRequest(
                     symbol=ticker,
-                    qty=quantity,
+                    qty=int(quantity),
                     side=s,
                     time_in_force=TimeInForce.DAY
                     )
@@ -171,7 +296,7 @@ class TradingBot:
         orders = self.get_all_open_orders()
         side, qty, orderid  = self.get_asset_pending_orders(orders, ticker)
 
-        trading_client = TradingClient(ALPACA_KEY, ALPACA_SECRET)
+        trading_client = TradingClient(ALPACA_KEY, ALPACA_SECRET, paper=self.paper)
         trading_client.cancel_order_by_id(order_id = orderid)
 
 
@@ -277,7 +402,7 @@ class TradingBot:
     #  After refreshing position states and signals, as above
     #  these methods place relevant orders to sync position state + signal
 
-    def reconcile_asset_orders_and_holdings(self, ticker, buy_quantity):
+    def reconcile_asset_orders_and_holdings(self, ticker):
 
         con = sqlite3.connect(DATABASE_PATH)
         df = pd.read_sql_query("SELECT * FROM holdings", con)
@@ -297,10 +422,10 @@ class TradingBot:
             if position_state in ['OPEN', 'OPENING', 'PARTIAL FILL', 'FIXING_SHORT']:
                 return
             elif position_state == 'CLOSED':
-                self.place_market_order(ticker, 'buy', buy_quantity)
+                self.place_market_order(ticker = ticker, side = 'buy', quantity = None)
             elif position_state == 'CLOSING':
                 self.cancel_order(ticker)
-                self.place_market_order(ticker, 'buy', buy_quantity)
+                self.place_market_order(ticker = ticker, side = 'buy', quantity = None)
             elif position_state == 'ERROR':
                 print(f"Error in reconcile_asset_orders_and_holdings for {ticker}")
                 return
@@ -322,12 +447,12 @@ class TradingBot:
             if position_state in ['CLOSED', 'CLOSING', 'FIXING_SHORT']:
                 return
             elif position_state == 'OPEN':
-                self.place_market_order(ticker, 'sell', buy_quantity)
+                self.place_market_order(ticker = ticker, side = 'sell', quantity = quantity_bought)
             elif position_state == 'OPENING':
                 self.cancel_order(ticker)
             elif position_state == 'PARTIAL FILL':
                 self.cancel_order(ticker)
-                self.place_market_order(ticker, 'sell', buy_quantity)
+                self.place_market_order(ticker = ticker, side = 'sell', quantity = quantity_bought)
             elif position_state == 'ERROR':
                 print(f"Error in reconcile_asset_orders_and_holdings for {ticker}")
                 return
@@ -335,8 +460,6 @@ class TradingBot:
         else:
             print(f"Error in reconcile_asset_orders_and_holdings for {ticker}")
             return
-
-
 
 
 
@@ -353,17 +476,27 @@ class TradingBot:
             ticker = row['cik_ticker']
             buy_quantity = row['quantity_bought']
             print(ticker, buy_quantity)
-            self.reconcile_asset_orders_and_holdings(ticker, self.buy_quantity)
+            self.reconcile_asset_orders_and_holdings(ticker)
 
 
     # ======================= #
     #    MAIN LOOP METHODS    #
 
     def main_loop(self):
+        """
+        MAIN LOOP FOR BOT
 
-        # refresh all position states
-        # refresh all signals
-        # reconcile all orders and holdings
-        # refresh position states again?
+        1. Using seperate signal engine, refresh holdings table signals
+        2. Refresh position states
+        3. Reconcile orders and holdings
+        4. Sleep for 5 minutes
+        5. Repeat
+        """
 
-        pass
+
+        self.signalengine.run_section_one()
+        self.signalengine.run_holdings_engine_refresh()
+        self.refresh_holdings_table_position_states()
+        self.reconcile_table_orders_and_holdings()
+
+        time.sleep(300)

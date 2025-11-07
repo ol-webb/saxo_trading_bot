@@ -4,7 +4,8 @@
 
 ## Near Future
 
-1. fetch ticker price info before placing order, so we base the quantity on the value of the stock price, not just the number of shares
+
+1. add keyword arguments to all the methods
 
 
 
