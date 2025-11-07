@@ -4,8 +4,11 @@
 
 ## Near Future
 
+0. confirm whether order side and position side are 'buy' / 'sell' / 'long' / 'short'
 
 1. add keyword arguments to all the methods
+
+2. logging, print statements etc
 
 
 

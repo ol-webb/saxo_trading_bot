@@ -14,7 +14,7 @@ def main():
     
     # Create bot instance
     bot = TradingBot(
-        thresholds=None,      # Use default thresholds
+        thresholds={},      # Use default thresholds
         buy_quantity=200,     # $100 per trade
         paper=True            # Paper trading mode
     )

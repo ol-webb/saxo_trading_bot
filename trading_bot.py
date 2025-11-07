@@ -23,6 +23,7 @@ from alpaca.data.requests import (
 from alpaca.data.enums import DataFeed
 from alpaca.data.timeframe import TimeFrame
 from datetime import datetime, timedelta, timezone
+import time
 
 
 
@@ -233,7 +234,7 @@ class TradingBot:
                 side = order.side._value_
                 orderid = str(order.id)
                 return side, qty, orderid
-        return None, None
+        return None, None, None
 
 
     def get_asset_positions(self, ticker):
@@ -309,12 +310,12 @@ class TradingBot:
     def get_new_asset_position_state(self, ticker, orders):
         """calls get_pending_orders and get_open_positions, and returns a new position state"""
 
-        order_side, oq = self.get_asset_pending_orders(orders, ticker)
+        order_side, oq, orderid = self.get_asset_pending_orders(orders, ticker)
         if oq is not None:
             order_qty = float(oq)
         else:
             order_qty = 0
-        print(order_side, order_qty)
+        print(order_side, order_qty) # order side: 'buy' or 'sell' or None
 
         holdings_side, hq = self.get_asset_positions(ticker)
         if hq is not None:
@@ -332,18 +333,18 @@ class TradingBot:
             elif (order_side == None) and ((order_qty == None) or (order_qty == 0)):
                 return "OPEN", holdings_qty
 
-            elif (order_side == 'short') and (order_qty > 0): # still positive for shorting
+            elif (order_side == 'sell') and (order_qty > 0): # still positive for shorting
                 return "CLOSING", holdings_qty
 
         elif (holdings_side == None) and ((holdings_qty == None) or (holdings_qty == 0)):
 
-            if (order_side == 'long') and (order_qty > 0):
+            if (order_side == 'buy') and (order_qty > 0):
                 return "OPENING", holdings_qty
 
             elif (order_side == None) and ((order_qty == None) or (order_qty == 0)):
                 return "CLOSED", holdings_qty
 
-            elif (order_side == 'short') and (order_qty > 0):
+            elif (order_side == 'sell') and (order_qty > 0):
                 return "SHORTING", holdings_qty
 
         elif (holdings_side == 'short') and (holdings_qty < 0): # should this be negative?
