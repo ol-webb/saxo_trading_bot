@@ -5,14 +5,18 @@ import pandas as pd
 import numpy as np
 import sys
 from pathlib import Path
+from alpaca.trading.client import TradingClient
+from alpaca.trading.requests import GetOrdersRequest
+from alpaca.trading.enums import QueryOrderStatus
 
-# add the private/bot directory to Python's import path
-private_path = Path(__file__).resolve().parents[1] / "private" / "bot"
+# Add private directory to Python path (parent of core_logic package)
+private_path = Path(__file__).resolve().parents[1] / "private"
 sys.path.insert(0, str(private_path))
 
-from model import SignalEngine   # now you can import normally
-
-
+# Now import from the package
+from core_logic import SignalEngine
+from core_logic.paths import DATABASE_PATH
+from core_logic.config import ALPACA_KEY, ALPACA_SECRET
 
 
 
@@ -67,31 +71,63 @@ _______________________________________
 """
 class TradingBot:
 
-    def __init__(self, model_path=None):
+    def __init__(self, thresholds=None):
 
-        self.signalengine = SignalEngine(refresh_rate=10, model_path=model_path, decision_threshold=0.5)
+        self.signalengine = SignalEngine(refresh_rate=10, thresholds=thresholds)
+        self.database_path = DATABASE_PATH
 
-        print(self.signalengine)
     
     # ======================= #
     # Refresh Holdings Table  #
     # ======================= #
     def refresh_holdings_table_signals(self):
-        pass
-
-
+        self.signalengine.run_holdings_engine_refresh()
 
 
     # ======================= #
     #     ALPACA METHODS      #
     # ======================= #
 
+    def get_all_open_orders(self):
+        trading_client = TradingClient(ALPACA_KEY, ALPACA_SECRET)
 
-    def get_pending_orders(self):
-        pass
+        get_orders_data = GetOrdersRequest(
+            status=QueryOrderStatus.OPEN,
+            limit=200,
+            nested=True
+        )
 
-    def get_open_positions(self):
-        pass
+        orders = trading_client.get_orders(filter=get_orders_data)
+        return orders
+
+
+    def get_asset_pending_orders(self, orders, ticker):
+        
+        for order in orders:
+
+            if order.symbol == ticker:
+
+                qty = order.qty
+                side = order.side._value_
+                return side, qty
+        return None, None
+
+
+    def get_asset_positions(self, ticker):
+
+        trading_client = TradingClient(ALPACA_KEY, ALPACA_SECRET)
+
+        try:
+            position = trading_client.get_open_position(ticker)
+        except Exception as e:
+            print(f"Error getting asset positions: {e}")
+            return None, None
+
+        side = position.side._value_ # 'long' or 'short
+        qty = position.qty
+
+        return side, qty
+
 
     def place_market_order(self):
         pass
@@ -101,12 +137,96 @@ class TradingBot:
     # UPDATE POSITION STATES  #
     # ======================= #
 
-    def get_new_asset_position_state(self, ticker, cik):
+
+
+    def get_new_asset_position_state(self, ticker, orders):
         """calls get_pending_orders and get_open_positions, and returns a new position state"""
-        pass
+
+        order_side, oq = self.get_asset_pending_orders(orders, ticker)
+        if oq is not None:
+            order_qty = float(oq)
+        else:
+            order_qty = 0
+        print(order_side, order_qty)
+
+        holdings_side, hq = self.get_asset_positions(ticker)
+        if hq is not None:
+            holdings_qty = float(hq)
+        else:
+            holdings_qty = 0
+        print(holdings_side, holdings_qty)
+
+
+        if (holdings_side == 'long') and (holdings_qty > 0):
+
+            if (order_side == 'buy') and (order_qty > 0):
+                return "PARTIAL FILL", holdings_qty
+
+            elif (order_side == None) and ((order_qty == None) or (order_qty == 0)):
+                return "OPEN", holdings_qty
+
+            elif (order_side == 'short') and (order_qty > 0): # still positive for shorting
+                return "CLOSING", holdings_qty
+
+        elif (holdings_side == None) and ((holdings_qty == None) or (holdings_qty == 0)):
+
+            if (order_side == 'long') and (order_qty > 0):
+                return "OPENING", holdings_qty
+
+            elif (order_side == None) and ((order_qty == None) or (order_qty == 0)):
+                return "CLOSED", holdings_qty
+
+            elif (order_side == 'short') and (order_qty > 0):
+                return "SHORTING", holdings_qty
+
+        elif (holdings_side == 'short') and (holdings_qty < 0): # should this be negative?
+
+            if (order_side == 'buy') and (order_qty > 0):
+                return "FIXING_SHORT", holdings_qty
+            
+            elif (order_side == None) and ((order_qty == None) or (order_qty == 0)):
+                return "SHORT_OPEN", holdings_qty
+
+            elif (order_side == 'sell') and (order_qty > 0):
+                return "MORE_SHORTING", holdings_qty
+
+        else:
+            return "ERROR", holdings_qty
+        
 
     def refresh_holdings_table_position_states(self):
-        pass
+        """refresh the position states for all assets in the holdings table"""
+
+        con = sqlite3.connect(DATABASE_PATH)
+        df = pd.read_sql_query("SELECT * FROM holdings", con)
+        con.close()
+
+        orders = self.get_all_open_orders()
+
+        for index, row in df.iterrows():
+            ticker = row['cik_ticker']
+            print(ticker)
+            position_state, holdings_qty = self.get_new_asset_position_state(ticker, orders)
+            df.loc[index, 'position_state'] = position_state
+            df.loc[index, 'quantity_bought'] = holdings_qty
+
+        updated_data = [
+            (row['position_state'], row['quantity_bought'], row['unique_id']) for _, row in df.iterrows()
+        ]
+
+        con = sqlite3.connect(DATABASE_PATH)
+        cursor = con.cursor()
+        cursor.executemany("""
+                            UPDATE holdings
+                            SET position_state = ?, quantity_bought = ?
+                            WHERE unique_id = ?
+                            """, updated_data)
+        con.commit()
+        con.close()
+
+        print("Position states refreshed")
+
+
 
 
     # =============================== #
@@ -115,8 +235,60 @@ class TradingBot:
     #  After refreshing position states and signals, as above
     #  these methods place relevant orders to sync position state + signal
 
-    def reconcile_asset_orders_and_holdings(self):
-        pass
+    def reconcile_asset_orders_and_holdings(self, ticker):
+
+        con = sqlite3.connect(DATABASE_PATH)
+        df = pd.read_sql_query("SELECT * FROM holdings", con)
+        con.close()
+
+        row = df[df['cik_ticker'] == ticker]
+        position_state = row['position_state'].values[0]
+        signal = row['signal'].values[0]
+        quantity_bought = row['quantity_bought'].values[0]
+
+        if signal == 'BUY':
+
+            if position_state in ['OPEN', 'OPENING', 'PARTIAL FILL', 'FIXING_SHORT']:
+                return
+            elif position_state == 'CLOSED':
+                #place order
+                return
+            elif position_state == 'CLOSING':
+                #cancel order + place order
+            elif position_state == 'ERROR':
+                # do something
+
+        elif signal == 'HOLD':
+
+            if position_state in ['OPEN', 'CLOSED', 'FIXING_SHORT']:
+                return
+            elif position_state in ['OPENING', 'PARTIAL FILL']:
+                # cancel order
+            elif position_state == 'CLOSING':
+                # cancel order
+            elif position_state == 'ERROR':
+                # do something
+            
+        elif signal == 'SELL':
+
+            if position_state in ['CLOSED', 'CLOSING', 'FIXING_SHORT']:
+                return
+            elif position_state == 'OPEN':
+                # place sell order
+            elif position_state == 'OPENING':
+                # cancel order
+            elif position_state == 'PARTIAL FILL':
+                # cancel order + sell
+            elif position_state == 'ERROR':
+                # do something
+        
+        else:
+            # dunno mate
+
+
+
+
+
 
     def reconcile_table_orders_and_holdings(self):
         pass
