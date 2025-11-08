@@ -1,4 +1,23 @@
+# environment
 .env
+*.env
+
+# python
+__pycache__/
+*.pyo
+*.pyc
+
+# database
+*.db
+
+# jupyter
+*.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+
+# error log
+error_log.md
+
+# notebooks
 nb_development.ipynb
 error_log.md
-docs/images/

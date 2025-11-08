@@ -31,7 +31,6 @@ import time
 private_path = Path(__file__).resolve().parents[1] / "private"
 sys.path.insert(0, str(private_path))
 
-# Now import from the package
 from core_logic import SignalEngine
 from core_logic.paths import DATABASE_PATH
 from core_logic.config import ALPACA_KEY, ALPACA_SECRET
@@ -305,8 +304,6 @@ class TradingBot:
     # UPDATE POSITION STATES  #
     # ======================= #
 
-
-
     def get_new_asset_position_state(self, ticker, orders):
         """calls get_pending_orders and get_open_positions, and returns a new position state"""
 
@@ -396,7 +393,6 @@ class TradingBot:
 
 
 
-
     # =============================== #
     #  RECONCILE ORDERS AND HOLDINGS  #
     # =============================== #
@@ -461,8 +457,6 @@ class TradingBot:
         else:
             print(f"Error in reconcile_asset_orders_and_holdings for {ticker}")
             return
-
-
 
 
     def reconcile_table_orders_and_holdings(self):
