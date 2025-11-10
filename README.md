@@ -8,6 +8,11 @@ The *holdings* table, contains features *signal* and *position_state* (described
 
 You can insert your own logic for a signal engine to update the table with new assets and new signals. Provided with the relevant keys, the bot will update *position_state* and reconcile it with *signal* by placing or cancelling orders.
 
+### Repo Layout
+
+The system design is outlined in ARCHITECTURE.md
+The bot is entirely in 
+
 ## Requirements
 
 ### database
@@ -23,4 +28,5 @@ Some external object used to refresh *holdings*. Particularly, it should refresh
 - signalengine.run_holdings_engine_refresh
 
 Those could of course be combined into one method. run_section_one() can be used to run any models or background tasks. run_holdings_engine_refresh() can be used to act directly on *holdings* table.
+
 
