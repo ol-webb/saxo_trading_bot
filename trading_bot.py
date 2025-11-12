@@ -368,12 +368,19 @@ class TradingBot:
 
         orders = self.get_all_open_orders()
 
-        for index, row in df.iterrows():
-            ticker = row['cik_ticker']
-            print(ticker)
+        unique_tickers = df['cik_ticker'].unique()
+
+        for ticker in unique_tickers:
             position_state, holdings_qty = self.get_new_asset_position_state(ticker, orders)
-            df.loc[index, 'position_state'] = position_state
-            df.loc[index, 'quantity_bought'] = holdings_qty
+            df.loc[df['cik_ticker'] == ticker, 'position_state'] = position_state
+            df.loc[df['cik_ticker'] == ticker, 'quantity_bought'] = holdings_qty
+
+        # for index, row in df.iterrows():
+        #     ticker = row['cik_ticker']
+        #     print(ticker)
+        #     position_state, holdings_qty = self.get_new_asset_position_state(ticker, orders)
+        #     df.loc[index, 'position_state'] = position_state
+        #     df.loc[index, 'quantity_bought'] = holdings_qty
 
         updated_data = [
             (row['position_state'], row['quantity_bought'], row['unique_id']) for _, row in df.iterrows()
@@ -467,11 +474,18 @@ class TradingBot:
         df = pd.read_sql_query("SELECT * FROM holdings", con)
         con.close()
 
-        for index, row in df.iterrows():
-            ticker = row['cik_ticker']
-            buy_quantity = row['quantity_bought']
+        unique_tickers = df['cik_ticker'].unique()
+
+        for ticker in unique_tickers:
+            buy_quantity = df.loc[df['cik_ticker'] == ticker, 'quantity_bought'].values[0]
             print(ticker, buy_quantity)
             self.reconcile_asset_orders_and_holdings(ticker)
+
+        # for index, row in df.iterrows():
+        #     ticker = row['cik_ticker']
+        #     buy_quantity = row['quantity_bought']
+        #     print(ticker, buy_quantity)
+        #     self.reconcile_asset_orders_and_holdings(ticker)
 
 
     # ======================= #
