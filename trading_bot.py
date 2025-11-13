@@ -113,10 +113,13 @@ class TradingBot:
         fractionable = asset.fractionable
 
         if not tradable:
+            print(f"Asset {ticker} is not tradable")
             return None
         
         price = self.get_asset_price(ticker)
+        print(f"Price for {ticker} is {price}")
         if price is None:
+            print(f"Price for {ticker} is None")
             return 1
 
         shares = self.buy_quantity / price # shares to buy = buy quantity / price per share
@@ -125,7 +128,7 @@ class TradingBot:
         if fractionable:
             return shares
         else:
-            return math.ceil(shares)
+            return int(math.ceil(shares))
 
 
     # ======================= #
@@ -274,11 +277,13 @@ class TradingBot:
         if quantity is None:
             quantity = self.get_order_size_quantity(ticker)
         else:
-            quantity = int(quantity)
+            quantity = quantity
+
+        print(f"Quantity for {ticker} is {quantity}")
 
         market_order_data = MarketOrderRequest(
                     symbol=ticker,
-                    qty=int(quantity),
+                    qty=quantity,
                     side=s,
                     time_in_force=TimeInForce.DAY
                     )
@@ -370,17 +375,17 @@ class TradingBot:
 
         unique_tickers = df['cik_ticker'].unique()
 
-        for ticker in unique_tickers:
-            position_state, holdings_qty = self.get_new_asset_position_state(ticker, orders)
-            df.loc[df['cik_ticker'] == ticker, 'position_state'] = position_state
-            df.loc[df['cik_ticker'] == ticker, 'quantity_bought'] = holdings_qty
-
-        # for index, row in df.iterrows():
-        #     ticker = row['cik_ticker']
-        #     print(ticker)
+        # for ticker in unique_tickers:
         #     position_state, holdings_qty = self.get_new_asset_position_state(ticker, orders)
-        #     df.loc[index, 'position_state'] = position_state
-        #     df.loc[index, 'quantity_bought'] = holdings_qty
+        #     df.loc[df['cik_ticker'] == ticker, 'position_state'] = position_state
+        #     df.loc[df['cik_ticker'] == ticker, 'quantity_bought'] = holdings_qty
+
+        for index, row in df.iterrows():
+            ticker = row['cik_ticker']
+            print(ticker)
+            position_state, holdings_qty = self.get_new_asset_position_state(ticker, orders)
+            df.loc[index, 'position_state'] = position_state
+            df.loc[index, 'quantity_bought'] = holdings_qty
 
         updated_data = [
             (row['position_state'], row['quantity_bought'], row['unique_id']) for _, row in df.iterrows()
@@ -477,7 +482,9 @@ class TradingBot:
         unique_tickers = df['cik_ticker'].unique()
 
         for ticker in unique_tickers:
-            buy_quantity = df.loc[df['cik_ticker'] == ticker, 'quantity_bought'].values[0]
+            # buy_quantity = df.loc[df['cik_ticker'] == ticker, 'quantity_bought'].values[0]
+            # print(ticker, buy_quantity)
+            buy_quantity = next(iter(df.loc[df['cik_ticker'] == ticker, 'quantity_bought']), None)
             print(ticker, buy_quantity)
             self.reconcile_asset_orders_and_holdings(ticker)
 
