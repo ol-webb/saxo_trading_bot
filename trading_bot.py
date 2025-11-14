@@ -32,7 +32,7 @@ private_path = Path(__file__).resolve().parents[1] / "private"
 sys.path.insert(0, str(private_path))
 
 from core_logic import SignalEngine
-from core_logic.paths import DATABASE_PATH
+from core_logic.paths import LIVE_DATABASE_PATH
 from core_logic.config import ALPACA_KEY, ALPACA_SECRET
 
 
@@ -91,7 +91,7 @@ class TradingBot:
     def __init__(self, thresholds=None, buy_quantity=100, paper=True):
 
         self.signalengine = SignalEngine(refresh_rate=10, thresholds=thresholds)
-        self.database_path = DATABASE_PATH
+        self.database_path = LIVE_DATABASE_PATH
         self.buy_quantity = buy_quantity
         self.paper = paper
     
@@ -367,7 +367,7 @@ class TradingBot:
     def refresh_holdings_table_position_states(self):
         """refresh the position states for all assets in the holdings table"""
 
-        con = sqlite3.connect(DATABASE_PATH)
+        con = sqlite3.connect(self.database_path)
         df = pd.read_sql_query("SELECT * FROM holdings", con)
         con.close()
 
@@ -391,7 +391,7 @@ class TradingBot:
             (row['position_state'], row['quantity_bought'], row['unique_id']) for _, row in df.iterrows()
         ]
 
-        con = sqlite3.connect(DATABASE_PATH)
+        con = sqlite3.connect(self.database_path)
         cursor = con.cursor()
         cursor.executemany("""
                             UPDATE holdings
@@ -421,18 +421,19 @@ class TradingBot:
         else:
             return "HOLD"
 
+
     def reconcile_asset_orders_and_holdings(self, ticker):
 
-        con = sqlite3.connect(DATABASE_PATH)
+        con = sqlite3.connect(self.database_path)
         df = pd.read_sql_query("SELECT * FROM holdings", con)
         con.close()
 
         try:
             row = df[df['cik_ticker'] == ticker]
             position_state = row['position_state'].values[0]
-            signal_array_values = row['signal']
+            signal_array_values = row['signal'].values
             signal = self.compile_asset_signals(signal_array_values)
-            print(f"testing signal compiler \n signal array values: {signal_array_values} \n signal compiled: {signal}")
+            #print(f"testing signal compiler \n signal array values: {signal_array_values} \n signal compiled: {signal}")
             quantity_bought = row['quantity_bought'].values[0]
         except Exception as e:
             print(f"Error in extracting data for {ticker}")
@@ -487,7 +488,7 @@ class TradingBot:
         """
         Iterate through whole table and reconcile position state + signal for each asset"""
 
-        con = sqlite3.connect(DATABASE_PATH)
+        con = sqlite3.connect(self.database_path)
         df = pd.read_sql_query("SELECT * FROM holdings", con)
         con.close()
 
