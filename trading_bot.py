@@ -411,6 +411,16 @@ class TradingBot:
     #  After refreshing position states and signals, as above
     #  these methods place relevant orders to sync position state + signal
 
+    def compile_asset_signals(self, array):
+        """occasionally, assets might have multiple rows in holdings, with differing signals, this function compiles them into a single signal"""
+
+        if "SELL" in array:
+            return "SELL"
+        elif "BUY" in array:
+            return "BUY"
+        else:
+            return "HOLD"
+
     def reconcile_asset_orders_and_holdings(self, ticker):
 
         con = sqlite3.connect(DATABASE_PATH)
@@ -420,7 +430,9 @@ class TradingBot:
         try:
             row = df[df['cik_ticker'] == ticker]
             position_state = row['position_state'].values[0]
-            signal = row['signal'].values[0]
+            signal_array_values = row['signal']
+            signal = self.compile_asset_signals(signal_array_values)
+            print(f"testing signal compiler \n signal array values: {signal_array_values} \n signal compiled: {signal}")
             quantity_bought = row['quantity_bought'].values[0]
         except Exception as e:
             print(f"Error in extracting data for {ticker}")
