@@ -1,11 +1,6 @@
-import sys
-from pathlib import Path
 
-# Add parent directory (public/) to path so we can import trading_bot
-parent_dir = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(parent_dir))
 
-from trading_bot import TradingBot
+from public.trading_bot import TradingBot
 
 def main():
     """Initialize and run the trading bot"""

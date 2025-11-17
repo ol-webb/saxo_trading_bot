@@ -26,14 +26,9 @@ from datetime import datetime, timedelta, timezone
 import time
 
 
-
-# Add private directory to Python path (parent of core_logic package)
-private_path = Path(__file__).resolve().parents[1] / "private"
-sys.path.insert(0, str(private_path))
-
-from core_logic import SignalEngine
-from core_logic.paths import LIVE_DATABASE_PATH
-from core_logic.config import ALPACA_KEY, ALPACA_SECRET
+from private.core_logic import SignalEngine
+from private.core_logic.paths import LIVE_DATABASE_PATH
+from private.core_logic.config import ALPACA_KEY, ALPACA_SECRET
 
 
 
