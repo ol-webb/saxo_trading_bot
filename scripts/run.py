@@ -1,5 +1,3 @@
-
-
 from public.trading_bot import TradingBot
 
 def main():
@@ -9,7 +7,9 @@ def main():
     
     # Create bot instance
     bot = TradingBot(
-        thresholds={},      # Use default thresholds
+        thresholds={
+            "decision_threshold": 0.7,
+        },      # Use default thresholds
         buy_quantity=200,     # $100 per trade
         paper=True            # Paper trading mode
     )

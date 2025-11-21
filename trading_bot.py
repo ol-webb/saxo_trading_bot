@@ -85,10 +85,11 @@ class TradingBot:
 
     def __init__(self, thresholds=None, buy_quantity=100, paper=True):
 
-        self.signalengine = SignalEngine(refresh_rate=10, thresholds=thresholds)
         self.database_path = LIVE_DATABASE_PATH
         self.buy_quantity = buy_quantity
         self.paper = paper
+        self.signalengine = SignalEngine(refresh_rate=10, thresholds=thresholds, database_path=self.database_path)
+
     
     # ======================= #
     # Refresh Holdings Table  #
