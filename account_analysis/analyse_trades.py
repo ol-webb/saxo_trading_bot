@@ -11,6 +11,7 @@ from alpaca.trading.requests import GetOrdersRequest
 from alpaca.trading.enums import QueryOrderStatus
 
 from private.core_logic.config import ALPACA_KEY, ALPACA_SECRET
+from private.core_logic.paths import TRADE_TRACKING_CSV_PATH
 
 
 class TradeFetcher:
@@ -21,6 +22,7 @@ class TradeFetcher:
             alpaca_secret,
             paper=True,
         )
+        self.trades_csv = TRADE_TRACKING_CSV_PATH
 
     def _get_closed_orders(self, after: datetime, until: datetime, limit: int):
         """
@@ -77,7 +79,6 @@ class TradeFetcher:
 
         print(f"Total filled trades collected: {len(trades)}")
         return trades
-
 
 
     def pair_round_trips_from_orders(self, filled_orders: List[Any]) -> List[Dict[str, Any]]:
@@ -164,6 +165,8 @@ class TradeFetcher:
                 pnl_amount = (sell_price - buy_price) * qty
                 pnl_percentage = (sell_price - buy_price) / buy_price
 
+                return_on_basis = pnl_amount / (buy_price * qty)
+
                 round_trips.append(
                     {
                         "symbol": symbol,
@@ -176,6 +179,7 @@ class TradeFetcher:
                         "pnl_percentage": pnl_percentage,
                         "buy_order_id": buy["order_id"],
                         "sell_order_id": sell["order_id"],
+                        "return_on_basis": return_on_basis,
                         #"buy_raw": buy["raw"],
                         #"sell_raw": sell["raw"],
                     }
@@ -184,3 +188,42 @@ class TradeFetcher:
                 i += 2  # move past this pair
 
         return round_trips
+
+
+    def insert_trades_to_csv(self, trades):
+
+        columns = ['qty', 'buy_price', 'sell_price', 'buy_time', 'sell_time',
+       'pnl_amount', 'pnl_percentage', 'buy_order_id', 'sell_order_id',
+       'return_on_basis']
+
+        trades_df = pd.DataFrame(trades)[columns]
+
+        try:
+            print(f"Reading trades from {self.trades_csv}")
+            existing_trades = pd.read_csv(self.trades_csv)
+        except FileNotFoundError:
+            print("file not found")
+            return
+
+        trades_df['buy_time'] = trades_df['buy_time'].dt.strftime("%Y-%m-%d")
+        trades_df['sell_time'] = trades_df['sell_time'].dt.strftime("%Y-%m-%d")
+
+        mask_new = ~trades_df["buy_order_id"].isin(existing_trades["buy_order_id"])
+        trades_df_new_only = trades_df[mask_new]
+        df_updated = pd.concat([existing_trades, trades_df_new_only], ignore_index=True)
+        df_updated.to_csv(self.trades_csv, index=False)
+
+        return df_updated
+
+    
+    def update_csv(self, lookback_days):
+
+        start_date = datetime.now() - timedelta(days=lookback_days)
+        end_date = datetime.now()
+
+        trades = self.get_trades_bypass_limit(after=start_date, until=end_date, limit_per_request=500)
+        trades = self.pair_round_trips_from_orders(trades)
+        self.insert_trades_to_csv(trades)
+
+
+
