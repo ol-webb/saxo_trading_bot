@@ -21,3 +21,6 @@ error_log.md
 # notebooks
 nb_development.ipynb
 error_log.md
+
+# data
+data/trades_private.csv
