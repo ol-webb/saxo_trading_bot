@@ -11,18 +11,22 @@ from alpaca.trading.requests import GetOrdersRequest
 from alpaca.trading.enums import QueryOrderStatus
 
 from private.core_logic.config import ALPACA_KEY, ALPACA_SECRET
-from private.core_logic.paths import TRADE_TRACKING_CSV_PATH
+from private.core_logic.paths import TRADE_TRACKING_CSV_PATH, TRADE_TRACKING_CSV_PATH_PRIVATE
 
 
 class TradeFetcher:
 
-    def __init__(self, *, alpaca_key, alpaca_secret):
+    def __init__(self, *, alpaca_key, alpaca_secret, public=False):
         self.trading_client = TradingClient(
             alpaca_key,
             alpaca_secret,
             paper=True,
         )
-        self.trades_csv = TRADE_TRACKING_CSV_PATH
+        self.public = public
+        if public:
+            self.trades_csv = TRADE_TRACKING_CSV_PATH
+        else:
+            self.trades_csv = TRADE_TRACKING_CSV_PATH_PRIVATE
 
     def _get_closed_orders(self, after: datetime, until: datetime, limit: int):
         """
@@ -179,6 +183,7 @@ class TradeFetcher:
                         "pnl_percentage": pnl_percentage,
                         "buy_order_id": buy["order_id"],
                         "sell_order_id": sell["order_id"],
+                        "basis": buy_price * qty,
                         "return_on_basis": return_on_basis,
                         #"buy_raw": buy["raw"],
                         #"sell_raw": sell["raw"],
@@ -192,9 +197,15 @@ class TradeFetcher:
 
     def insert_trades_to_csv(self, trades):
 
-        columns = ['qty', 'buy_price', 'sell_price', 'buy_time', 'sell_time',
-       'pnl_amount', 'pnl_percentage', 'buy_order_id', 'sell_order_id',
-       'return_on_basis']
+        if self.public:
+            columns = ['sell_time',
+                        'pnl_amount', 'pnl_percentage',
+                        'basis', 'buy_order_id']
+        else:
+            columns = ['qty', 'buy_price', 'sell_price', 'buy_time', 'sell_time',
+                        'pnl_amount', 'pnl_percentage', 'buy_order_id', 'sell_order_id',
+                        'return_on_basis', 'basis']
+
 
         trades_df = pd.DataFrame(trades)[columns]
 
@@ -205,7 +216,9 @@ class TradeFetcher:
             print("file not found")
             return
 
-        trades_df['buy_time'] = trades_df['buy_time'].dt.strftime("%Y-%m-%d")
+        if not self.public:
+            trades_df['buy_time'] = trades_df['buy_time'].dt.strftime("%Y-%m-%d")
+
         trades_df['sell_time'] = trades_df['sell_time'].dt.strftime("%Y-%m-%d")
 
         mask_new = ~trades_df["buy_order_id"].isin(existing_trades["buy_order_id"])
