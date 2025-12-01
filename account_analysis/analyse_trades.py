@@ -209,6 +209,8 @@ class TradeFetcher:
 
         trades_df = pd.DataFrame(trades)[columns]
 
+        trades_df['buy_order_id'] = trades_df['buy_order_id'].astype(str)
+
         try:
             print(f"Reading trades from {self.trades_csv}")
             existing_trades = pd.read_csv(self.trades_csv)
