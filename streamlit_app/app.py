@@ -272,20 +272,17 @@ with row1_col1:
         yaxis='y2'
     ))
     fig_cumulative.update_layout(
-        xaxis_title="Date",
-        yaxis_title="Cumulative P&L ($)",
+        xaxis=dict(title=dict(text="Date", font=dict(size=14)), tickfont=dict(size=12)),
+        yaxis=dict(title=dict(text="Cumulative P&L ($)", font=dict(size=14)), tickfont=dict(size=12)),
         yaxis2=dict(
-            title="Number of Trades",
+            title=dict(text="Number of Trades", font=dict(size=14)),
             overlaying='y',
             side='right',
-            titlefont=dict(size=14),
             tickfont=dict(size=12)
         ),
         height=320,
         margin=dict(l=20, r=20, t=10, b=10),
         font=dict(family="Times New Roman, Times, serif"),
-        xaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
-        yaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
         showlegend=True,
         legend=dict(x=0.02, y=0.98)
     )
@@ -334,13 +331,11 @@ with row1_col2:
             yaxis='y'
         ))
     fig_daily_bar.update_layout(
-        xaxis_title="Date",
-        yaxis_title=yaxis_title,
+        xaxis=dict(title=dict(text="Date", font=dict(size=14)), tickfont=dict(size=12)),
+        yaxis=dict(title=dict(text=yaxis_title, font=dict(size=14)), tickfont=dict(size=12)),
         height=320,
         margin=dict(l=20, r=20, t=10, b=10),
         font=dict(family="Times New Roman, Times, serif"),
-        xaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
-        yaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
         showlegend=True,
         legend=dict(x=0.02, y=0.98)
     )
@@ -376,13 +371,11 @@ with row2_col1:
         name='Trade Returns'
     ))
     fig_trade_hist.update_layout(
-        xaxis_title=xaxis_title,
-        yaxis_title="Frequency",
+        xaxis=dict(title=dict(text=xaxis_title, font=dict(size=14)), tickfont=dict(size=12)),
+        yaxis=dict(title=dict(text="Frequency", font=dict(size=14)), tickfont=dict(size=12)),
         height=320,
         margin=dict(l=20, r=20, t=10, b=10),
         font=dict(family="Times New Roman, Times, serif"),
-        xaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
-        yaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
         showlegend=False
     )
     st.plotly_chart(fig_trade_hist, use_container_width=True)
@@ -412,13 +405,11 @@ with row2_col2:
         name='Daily Returns'
     ))
     fig_daily_hist.update_layout(
-        xaxis_title=xaxis_title,
-        yaxis_title="Frequency",
+        xaxis=dict(title=dict(text=xaxis_title, font=dict(size=14)), tickfont=dict(size=12)),
+        yaxis=dict(title=dict(text="Frequency", font=dict(size=14)), tickfont=dict(size=12)),
         height=320,
         margin=dict(l=20, r=20, t=10, b=10),
         font=dict(family="Times New Roman, Times, serif"),
-        xaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
-        yaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
         showlegend=False
     )
     st.plotly_chart(fig_daily_hist, use_container_width=True)
@@ -464,13 +455,11 @@ with row3_col1:
         name='Basis vs Return'
     ))
     fig_scatter.update_layout(
-        xaxis_title=xaxis_title,
-        yaxis_title=yaxis_title,
+        xaxis=dict(title=dict(text=xaxis_title, font=dict(size=14)), tickfont=dict(size=12)),
+        yaxis=dict(title=dict(text=yaxis_title, font=dict(size=14)), tickfont=dict(size=12)),
         height=320,
         margin=dict(l=20, r=20, t=10, b=10),
         font=dict(family="Times New Roman, Times, serif"),
-        xaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
-        yaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
         showlegend=False
     )
     st.plotly_chart(fig_scatter, use_container_width=True)
@@ -490,13 +479,11 @@ with row3_col2:
     ))
     fig_drawdown.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.5)
     fig_drawdown.update_layout(
-        xaxis_title="Date",
-        yaxis_title="Drawdown (%)",
+        xaxis=dict(title=dict(text="Date", font=dict(size=14)), tickfont=dict(size=12)),
+        yaxis=dict(title=dict(text="Drawdown (%)", font=dict(size=14)), tickfont=dict(size=12)),
         height=320,
         margin=dict(l=20, r=20, t=10, b=10),
         font=dict(family="Times New Roman, Times, serif"),
-        xaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
-        yaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
         showlegend=False
     )
     st.plotly_chart(fig_drawdown, use_container_width=True)
@@ -528,13 +515,11 @@ with final_row_col1:
     fig_scatter_sp500.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.5)
     fig_scatter_sp500.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.5)
     fig_scatter_sp500.update_layout(
-        xaxis_title="S&P 500 Daily Return (%)",
-        yaxis_title="Bot Daily Return (%)",
+        xaxis=dict(title=dict(text="S&P 500 Daily Return (%)", font=dict(size=14)), tickfont=dict(size=12)),
+        yaxis=dict(title=dict(text="Bot Daily Return (%)", font=dict(size=14)), tickfont=dict(size=12)),
         height=320,
         margin=dict(l=20, r=20, t=10, b=10),
         font=dict(family="Times New Roman, Times, serif"),
-        xaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
-        yaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
         showlegend=False
     )
     st.plotly_chart(fig_scatter_sp500, use_container_width=True)
@@ -556,13 +541,11 @@ with final_row_col2:
     # Add reference line at 0
     fig_roll_corr.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.5)
     fig_roll_corr.update_layout(
-        xaxis_title="Date",
-        yaxis_title="Rolling Correlation",
+        xaxis=dict(title=dict(text="Date", font=dict(size=14)), tickfont=dict(size=12)),
+        yaxis=dict(title=dict(text="Rolling Correlation", font=dict(size=14)), tickfont=dict(size=12)),
         height=320,
         margin=dict(l=20, r=20, t=10, b=10),
         font=dict(family="Times New Roman, Times, serif"),
-        xaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
-        yaxis=dict(titlefont=dict(size=14), tickfont=dict(size=12)),
         showlegend=False
     )
     st.plotly_chart(fig_roll_corr, use_container_width=True)
