@@ -60,6 +60,8 @@ st.markdown("""
 st.markdown('<p class="main-title">Systematic Trading Algorithm Performance Analysis</p>', unsafe_allow_html=True)
 st.markdown('<p class="author">Oliver Webb - 2025-12-01</p>', unsafe_allow_html=True)
 
+st.markdown("### Introduction")
+
 st.markdown("""
 <div class="justified-text">
 Use dropdown, below, to select broker:  
@@ -68,6 +70,31 @@ Use dropdown, below, to select broker:
 - Bot is running using Alpaca now, so more data will appear in future.
 </div>
 """, unsafe_allow_html=True)
+
+
+def get_sp500_return_for_trade(row):
+    buy_date = row['buy_date_dt'].date() if hasattr(row['buy_date_dt'], 'date') else row['buy_date_dt']
+    sell_date = row['sell_date_dt'].date() if hasattr(row['sell_date_dt'], 'date') else row['sell_date_dt']
+    
+    available_dates = sp500_daily.index
+    
+    buy_dates_before = [d for d in available_dates if d <= buy_date]
+    if not buy_dates_before:
+        return np.nan
+    buy_price_date = max(buy_dates_before)
+    
+    sell_dates_before = [d for d in available_dates if d <= sell_date]
+    if not sell_dates_before:
+        return np.nan
+    sell_price_date = max(sell_dates_before)
+    
+    buy_price = sp500_daily.loc[buy_price_date, 'sp500_close']
+    sell_price = sp500_daily.loc[sell_price_date, 'sp500_close']
+    
+    if buy_price == 0 or pd.isna(buy_price):
+        return np.nan
+    
+    return ((sell_price - buy_price) / buy_price) * 100
 
 
 
@@ -123,37 +150,8 @@ if not sp500.empty and 'Close' in sp500.columns:
     sp500_daily['sp500_close'] = sp500['Close'].values
     sp500_daily['sp500_return_pct'] = sp500['Close'].pct_change().values * 100
     
-    # Calculate SP500 return for each trade's holding period
-    def get_sp500_return_for_trade(row):
-        buy_date = row['buy_date_dt'].date() if hasattr(row['buy_date_dt'], 'date') else row['buy_date_dt']
-        sell_date = row['sell_date_dt'].date() if hasattr(row['sell_date_dt'], 'date') else row['sell_date_dt']
-        
-        # Find closest available dates in SP500 data
-        available_dates = sp500_daily.index
-        
-        # Get buy date price (use nearest available date on or before)
-        buy_dates_before = [d for d in available_dates if d <= buy_date]
-        if not buy_dates_before:
-            return np.nan
-        buy_price_date = max(buy_dates_before)
-        
-        # Get sell date price (use nearest available date on or before)
-        sell_dates_before = [d for d in available_dates if d <= sell_date]
-        if not sell_dates_before:
-            return np.nan
-        sell_price_date = max(sell_dates_before)
-        
-        buy_price = sp500_daily.loc[buy_price_date, 'sp500_close']
-        sell_price = sp500_daily.loc[sell_price_date, 'sp500_close']
-        
-        if buy_price == 0 or pd.isna(buy_price):
-            return np.nan
-        
-        return ((sell_price - buy_price) / buy_price) * 100  # Return as percentage
-    
     df['sp500_return_trade'] = df.apply(get_sp500_return_for_trade, axis=1)
     
-    # Correlation: compare each trade's return_pct to SP500 return over same period
     valid_mask_trade = df['return_pct'].notna() & df['sp500_return_trade'].notna()
     if valid_mask_trade.sum() > 1:
         correlation_with_sp500 = df.loc[valid_mask_trade, 'return_pct'].corr(
