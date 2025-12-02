@@ -582,6 +582,7 @@ with final_row_col1:
         showlegend=False
     )
     st.plotly_chart(fig_scatter_sp500, use_container_width=True)
+    st.caption("S&P 500 returns are calculated over the same holding window as each trade (buy date → sell date).")
 
 with final_row_col2:
     st.markdown("<h1 style='font-size: 24px; font-weight: bold;'>Rolling Correlation (40-trade window)</h1>", unsafe_allow_html=True)
