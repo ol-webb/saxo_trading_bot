@@ -89,9 +89,9 @@ elif broker == "IBKR":
     capital = 200000 # average deployed capital, certain assumptions made here
 else:
     df = pd.read_csv(DATA_DIR / "ibkr_trades.csv")
-    df['date'] = pd.to_datetime(df['date'])
-    df['pnl'] = df['pnl']
-    df['basis'] = df['basis']
+    df['date'] = pd.to_datetime(df['trade_date'])
+    df['pnl'] = df['FifoPnlRealized']
+    df['basis'] = df['CostBasis']
     capital = 100000 # average deployed capital, certain assumptions made here
 
 
