@@ -241,7 +241,7 @@ st.markdown("---")
 # SECTION 1: Hero Metrics
 st.markdown("### Performance Metrics")
 st.markdown("""
-Paper trading accounts allocate large amounts of capital (usually ~\$1M), but deployed capital is much smaller than total bankroll, and position sizing is essentially constant relative to total bankroll. Hence, no well defined equity curve exists. As such, calculating annualised returns is not meaningful. We approximate Sharpe in two ways:
+Paper trading accounts allocate large amounts of capital (usually ~\$1M), but deployed capital and position sizing are both much smaller than total bankroll. Hence, no meaningful equity curve exists (since profits from trades do not significantly change the total bankroll). As such, calculating annualised returns is not meaningful. We approximate Sharpe in two ways:
 """)
 
 eq_col1, eq_col2 = st.columns(2)
@@ -251,9 +251,10 @@ with eq_col2:
     st.latex(r"\text{Sharpe}_{\text{capital}} = \frac{\bar{r}_d}{\sigma(r_d)} \times \sqrt{252}")
 
 st.markdown("""
-where $P_d$ is the P&L on day $d$ (in dollars), $\\bar{P}_d$ is the mean daily P&L, $\\sigma(P_d)$ is the standard deviation of daily P&L, 
-$r_d = (E_d - E_{d-1}) / E_{d-1}$ is the daily return, and $E_d$ is the equity on day $d$ computed using an assumed initial capital.
+where $P_d$ is the P&L on day $d$ (in dollars), $r_d = (E_d - E_{d-1}) / E_{d-1}$ is the daily return, and $E_d$ is the equity on day $d$ computed using an assumed initial capital. We note that the Interactive Brokers dashboard indicates a Sharpe of 1.6, although this likely includes risk free interest rate (4.5% in US), and will be based on total account value.
 """)
+
+st.markdown("")
 
 
 
