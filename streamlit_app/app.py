@@ -180,7 +180,7 @@ if not sp500.empty and 'Close' in sp500.columns:
         ).sort_index()
         
         # Rolling correlation on aggregated data
-        window = 25
+        window = 40
         trade_by_sell_date['roll_corr_spx'] = (
             trade_by_sell_date['return_pct_mean']
             .rolling(window=window)
