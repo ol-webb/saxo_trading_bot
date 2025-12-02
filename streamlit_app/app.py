@@ -72,7 +72,7 @@ Use dropdown, below, to select broker:
 
 
 # Broker selection
-broker = st.selectbox("", ["Alpaca", "IBKR"])
+broker = st.selectbox("", ["Alpaca", "IBKR", "other"])
 
 # Load and normalize data
 if broker == "Alpaca":
@@ -81,12 +81,18 @@ if broker == "Alpaca":
     df['pnl'] = df['pnl_amount']
     df['basis'] = df['basis']  # Make sure basis is loaded
     capital = 5000 # average deployed capital, certain assumptions made here
-else:  # IBKR
+elif broker == "IBKR":
     df = pd.read_csv(DATA_DIR / "ibkr_trades_2.csv")
     df['date'] = pd.to_datetime(df['date'])
     df['pnl'] = df['pnl']
     df['basis'] = df['basis']
     capital = 200000 # average deployed capital, certain assumptions made here
+else:
+    df = pd.read_csv(DATA_DIR / "ibkr_trades.csv")
+    df['date'] = pd.to_datetime(df['date'])
+    df['pnl'] = df['pnl']
+    df['basis'] = df['basis']
+    capital = 100000 # average deployed capital, certain assumptions made here
 
 
 
