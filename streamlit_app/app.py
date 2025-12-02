@@ -77,11 +77,13 @@ broker = st.selectbox("", ["Alpaca", "IBKR"])
 # Load and normalize data
 if broker == "Alpaca":
     df = pd.read_csv(DATA_DIR / "trades.csv")
-    df['date'] = pd.to_datetime(df['sell_time'])
+    df['buy_date_dt'] = pd.to_datetime(df['buy_time'])
+    df['sell_date_dt'] = pd.to_datetime(df['sell_time'])
+    df['date'] = df['sell_date_dt']  # Use sell date as the reference date
     df['pnl'] = df['pnl_amount']
-    df['basis'] = df['basis']  # Make sure basis is loaded
+    df['basis'] = df['basis']
+    df['return_pct'] = df['pnl'] / df['basis']  # Compute return_pct for per-trade comparison
     capital = 5000 # average deployed capital, certain assumptions made here
-    use_per_trade_sp500 = False  # Alpaca uses old daily aggregation method
 elif broker == "IBKR":
     df = pd.read_csv(DATA_DIR / "ibkr_trades_round_trips.csv")
     df['buy_date_dt'] = pd.to_datetime(df['buy_date_dt'])
@@ -89,8 +91,11 @@ elif broker == "IBKR":
     df['date'] = df['sell_date_dt']  # Use sell date as the reference date
     df['pnl'] = df['pnl']
     df['basis'] = df['basis']
+    # return_pct should already exist in IBKR csv
     capital = 200000 # average deployed capital, certain assumptions made here
-    use_per_trade_sp500 = True  # IBKR uses per-trade holding period method
+
+# Both brokers now use per-trade SP500 comparison
+use_per_trade_sp500 = True
 
 
 
@@ -110,6 +115,9 @@ daily = df.groupby('date').agg(
 daily['daily_return_pct'] = daily['pnl_daily'] / daily['basis_daily']
 
 # Download S&P 500 data for comparison
+# Initialize trade_by_sell_date for later use
+trade_by_sell_date = None
+
 if use_per_trade_sp500:
     # Per-trade SP500 comparison: calculate SP500 return over each trade's holding period
     start_date = df['buy_date_dt'].min() - pd.Timedelta(days=5)
@@ -627,20 +635,27 @@ with final_row_col1:
 with final_row_col2:
     if use_per_trade_sp500:
         st.markdown("<h1 style='font-size: 24px; font-weight: bold;'>Rolling Correlation (25-trade window)</h1>", unsafe_allow_html=True)
+        # Use trade_by_sell_date directly for per-trade rolling correlation
+        if 'trade_by_sell_date' in dir() and trade_by_sell_date is not None:
+            roll_corr_mask = trade_by_sell_date['roll_corr_spx'].notna()
+            roll_corr_data = trade_by_sell_date.loc[roll_corr_mask]
+        else:
+            roll_corr_data = pd.DataFrame()
     else:
         st.markdown("<h1 style='font-size: 24px; font-weight: bold;'>Rolling Correlation (25-day window)</h1>", unsafe_allow_html=True)
-    # Filter to valid rolling correlation data
-    roll_corr_mask = daily['roll_corr_spx'].notna()
-    roll_corr_data = daily.loc[roll_corr_mask]
+        # Filter to valid rolling correlation data
+        roll_corr_mask = daily['roll_corr_spx'].notna()
+        roll_corr_data = daily.loc[roll_corr_mask]
     
     fig_roll_corr = go.Figure()
-    fig_roll_corr.add_trace(go.Scatter(
-        x=roll_corr_data.index,
-        y=roll_corr_data['roll_corr_spx'],
-        mode='lines',
-        line=dict(color='#A23B72', width=2),
-        name='Rolling Correlation'
-    ))
+    if not roll_corr_data.empty:
+        fig_roll_corr.add_trace(go.Scatter(
+            x=roll_corr_data.index,
+            y=roll_corr_data['roll_corr_spx'],
+            mode='lines',
+            line=dict(color='#A23B72', width=2),
+            name='Rolling Correlation'
+        ))
     # Add reference line at 0
     fig_roll_corr.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.5)
     fig_roll_corr.update_layout(

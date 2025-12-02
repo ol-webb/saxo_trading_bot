@@ -198,7 +198,7 @@ class TradeFetcher:
     def insert_trades_to_csv(self, trades):
 
         if self.public:
-            columns = ['sell_time',
+            columns = ['sell_time', 'buy_time',
                         'pnl_amount', 'pnl_percentage',
                         'basis', 'buy_order_id']
         else:
@@ -218,10 +218,9 @@ class TradeFetcher:
             print("file not found")
             return
 
-        if not self.public:
-            trades_df['buy_time'] = trades_df['buy_time'].dt.strftime("%Y-%m-%d")
-
+        trades_df['buy_time'] = trades_df['buy_time'].dt.strftime("%Y-%m-%d")
         trades_df['sell_time'] = trades_df['sell_time'].dt.strftime("%Y-%m-%d")
+
 
         mask_new = ~trades_df["buy_order_id"].isin(existing_trades["buy_order_id"])
         trades_df_new_only = trades_df[mask_new]

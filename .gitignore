@@ -24,3 +24,4 @@ error_log.md
 
 # data
 data/trades_private.csv
+streamlit_app/data/trades_private.csv
