@@ -68,24 +68,27 @@ st.markdown("You can select which results to view: the few months of trading wit
 
 
 
-def get_sp500_return_for_trade(row):
+def get_sp500_return_for_trade(row, sp500_df):
+    """Calculate SP500 return over a trade's holding period."""
     buy_date = row['buy_date_dt'].date() if hasattr(row['buy_date_dt'], 'date') else row['buy_date_dt']
     sell_date = row['sell_date_dt'].date() if hasattr(row['sell_date_dt'], 'date') else row['sell_date_dt']
     
-    available_dates = sp500_daily.index
+    available_dates = list(sp500_df.index)
     
+    # Get buy date price (use nearest available date on or before)
     buy_dates_before = [d for d in available_dates if d <= buy_date]
     if not buy_dates_before:
         return np.nan
     buy_price_date = max(buy_dates_before)
     
+    # Get sell date price (use nearest available date on or before)
     sell_dates_before = [d for d in available_dates if d <= sell_date]
     if not sell_dates_before:
         return np.nan
     sell_price_date = max(sell_dates_before)
     
-    buy_price = sp500_daily.loc[buy_price_date, 'sp500_close']
-    sell_price = sp500_daily.loc[sell_price_date, 'sp500_close']
+    buy_price = sp500_df.loc[buy_price_date, 'sp500_close']
+    sell_price = sp500_df.loc[sell_price_date, 'sp500_close']
     
     if buy_price == 0 or pd.isna(buy_price):
         return np.nan
@@ -141,12 +144,15 @@ end_date = df['sell_date_dt'].max() + pd.Timedelta(days=5)
 
 sp500 = yf.download('^GSPC', start=start_date, end=end_date, progress=False)
 
-if not sp500.empty and 'Close' in sp500.columns:
+# Handle yfinance multi-level columns (newer versions return ('Close', 'GSPC'))
+sp500_close = sp500['Close'] if 'Close' in sp500.columns else sp500[('Close', '^GSPC')] if ('Close', '^GSPC') in sp500.columns else None
+
+if not sp500.empty and sp500_close is not None:
     sp500_daily = pd.DataFrame(index=pd.to_datetime(sp500.index).date)
-    sp500_daily['sp500_close'] = sp500['Close'].values
-    sp500_daily['sp500_return_pct'] = sp500['Close'].pct_change().values * 100
+    sp500_daily['sp500_close'] = sp500_close.values
+    sp500_daily['sp500_return_pct'] = sp500_close.pct_change().values * 100
     
-    df['sp500_return_trade'] = df.apply(get_sp500_return_for_trade, axis=1)
+    df['sp500_return_trade'] = df.apply(lambda row: get_sp500_return_for_trade(row, sp500_daily), axis=1)
     
     valid_mask_trade = df['return_pct'].notna() & df['sp500_return_trade'].notna()
     if valid_mask_trade.sum() > 1:
@@ -176,6 +182,7 @@ if not sp500.empty and 'Close' in sp500.columns:
     daily = daily.merge(sp500_daily[['sp500_close', 'sp500_return_pct']], 
                         left_index=True, right_index=True, how='left')
 else:
+    # SP500 data not available
     df['sp500_return_trade'] = np.nan
     daily['sp500_close'] = np.nan
     daily['sp500_return_pct'] = np.nan
