@@ -72,7 +72,7 @@ Use dropdown, below, to select broker:
 
 
 # Broker selection
-broker = st.selectbox("", ["Alpaca", "IBKR", "other"])
+broker = st.selectbox("", ["Alpaca", "IBKR"])
 
 # Load and normalize data
 if broker == "Alpaca":
@@ -81,20 +81,16 @@ if broker == "Alpaca":
     df['pnl'] = df['pnl_amount']
     df['basis'] = df['basis']  # Make sure basis is loaded
     capital = 5000 # average deployed capital, certain assumptions made here
+    use_per_trade_sp500 = False  # Alpaca uses old daily aggregation method
 elif broker == "IBKR":
-    df = pd.read_csv(DATA_DIR / "ibkr_trades_2.csv")
-    df['date'] = pd.to_datetime(df['date'])
+    df = pd.read_csv(DATA_DIR / "ibkr_trades_round_trips.csv")
+    df['buy_date_dt'] = pd.to_datetime(df['buy_date_dt'])
+    df['sell_date_dt'] = pd.to_datetime(df['sell_date_dt'])
+    df['date'] = df['sell_date_dt']  # Use sell date as the reference date
     df['pnl'] = df['pnl']
     df['basis'] = df['basis']
     capital = 200000 # average deployed capital, certain assumptions made here
-else:
-    df = pd.read_csv(DATA_DIR / "ibkr_trades.csv")
-    df['date'] = pd.to_datetime(df['trade_date'])
-    df['pnl'] = df['FifoPnlRealized']
-    df['basis'] = df['CostBasis']
-    capital = 100000 # average deployed capital, certain assumptions made here
-
-
+    use_per_trade_sp500 = True  # IBKR uses per-trade holding period method
 
 
 
@@ -114,8 +110,13 @@ daily = df.groupby('date').agg(
 daily['daily_return_pct'] = daily['pnl_daily'] / daily['basis_daily']
 
 # Download S&P 500 data for comparison
-start_date = pd.to_datetime(daily.index.min())  - pd.Timedelta(days=1)
-end_date = pd.to_datetime(daily.index.max()) + pd.Timedelta(days=1)
+if use_per_trade_sp500:
+    # Per-trade SP500 comparison: calculate SP500 return over each trade's holding period
+    start_date = df['buy_date_dt'].min() - pd.Timedelta(days=5)
+    end_date = df['sell_date_dt'].max() + pd.Timedelta(days=5)
+else:
+    start_date = pd.to_datetime(daily.index.min()) - pd.Timedelta(days=1)
+    end_date = pd.to_datetime(daily.index.max()) + pd.Timedelta(days=1)
 
 sp500 = yf.download('^GSPC', start=start_date, end=end_date, progress=False)
 
@@ -124,28 +125,95 @@ if not sp500.empty and 'Close' in sp500.columns:
     sp500_daily['sp500_close'] = sp500['Close'].values
     sp500_daily['sp500_return_pct'] = sp500['Close'].pct_change().values * 100
     
-    if not isinstance(daily.index[0], type(pd.Timestamp.now().date())):
-        daily.index = pd.to_datetime(daily.index).date
-    
-    daily = daily.merge(sp500_daily[['sp500_close', 'sp500_return_pct']], 
-                        left_index=True, right_index=True, how='left')
+    if use_per_trade_sp500:
+        # Calculate SP500 return for each trade's holding period
+        def get_sp500_return_for_trade(row):
+            buy_date = row['buy_date_dt'].date() if hasattr(row['buy_date_dt'], 'date') else row['buy_date_dt']
+            sell_date = row['sell_date_dt'].date() if hasattr(row['sell_date_dt'], 'date') else row['sell_date_dt']
+            
+            # Find closest available dates in SP500 data
+            available_dates = sp500_daily.index
+            
+            # Get buy date price (use nearest available date on or before)
+            buy_dates_before = [d for d in available_dates if d <= buy_date]
+            if not buy_dates_before:
+                return np.nan
+            buy_price_date = max(buy_dates_before)
+            
+            # Get sell date price (use nearest available date on or before)
+            sell_dates_before = [d for d in available_dates if d <= sell_date]
+            if not sell_dates_before:
+                return np.nan
+            sell_price_date = max(sell_dates_before)
+            
+            buy_price = sp500_daily.loc[buy_price_date, 'sp500_close']
+            sell_price = sp500_daily.loc[sell_price_date, 'sp500_close']
+            
+            if buy_price == 0 or pd.isna(buy_price):
+                return np.nan
+            
+            return ((sell_price - buy_price) / buy_price) * 100  # Return as percentage
+        
+        df['sp500_return_trade'] = df.apply(get_sp500_return_for_trade, axis=1)
+        
+        # Correlation: compare each trade's return_pct to SP500 return over same period
+        valid_mask_trade = df['return_pct'].notna() & df['sp500_return_trade'].notna()
+        if valid_mask_trade.sum() > 1:
+            correlation_with_sp500 = df.loc[valid_mask_trade, 'return_pct'].corr(
+                df.loc[valid_mask_trade, 'sp500_return_trade']
+            )
+        else:
+            correlation_with_sp500 = np.nan
+        
+        # Aggregate by sell_date for rolling correlation
+        trade_by_sell_date = df.groupby(df['sell_date_dt'].dt.date).agg(
+            return_pct_mean=('return_pct', 'mean'),
+            sp500_return_mean=('sp500_return_trade', 'mean')
+        ).sort_index()
+        
+        # Rolling correlation on aggregated data
+        window = 25
+        trade_by_sell_date['roll_corr_spx'] = (
+            trade_by_sell_date['return_pct_mean']
+            .rolling(window=window)
+            .corr(trade_by_sell_date['sp500_return_mean'])
+        )
+        
+        # Also add daily SP500 data for other charts
+        if not isinstance(daily.index[0], type(pd.Timestamp.now().date())):
+            daily.index = pd.to_datetime(daily.index).date
+        daily = daily.merge(sp500_daily[['sp500_close', 'sp500_return_pct']], 
+                            left_index=True, right_index=True, how='left')
+        # Copy rolling corr from trade-based calculation
+        daily['roll_corr_spx'] = np.nan
+        for date in trade_by_sell_date.index:
+            if date in daily.index:
+                daily.loc[date, 'roll_corr_spx'] = trade_by_sell_date.loc[date, 'roll_corr_spx']
+    else:
+        # Original daily aggregation method for Alpaca
+        if not isinstance(daily.index[0], type(pd.Timestamp.now().date())):
+            daily.index = pd.to_datetime(daily.index).date
+        
+        daily = daily.merge(sp500_daily[['sp500_close', 'sp500_return_pct']], 
+                            left_index=True, right_index=True, how='left')
+        
+        # correlation with sp500 (daily method)
+        valid_mask = daily['daily_return_pct'].notna() & daily['sp500_return_pct'].notna()
+        daily_returns_valid = daily.loc[valid_mask, 'daily_return_pct']
+        sp500_returns_valid = daily.loc[valid_mask, 'sp500_return_pct']
+        correlation_with_sp500 = daily_returns_valid.corr(sp500_returns_valid)
+        
+        # Rolling correlation (25-day window)
+        window = 25
+        if 'sp500_return_pct' in daily.columns and daily['sp500_return_pct'].notna().any():
+            daily['roll_corr_spx'] = daily['daily_return_pct'].rolling(window=window).corr(daily['sp500_return_pct'])
+        else:
+            daily['roll_corr_spx'] = np.nan
 else:
     daily['sp500_close'] = np.nan
     daily['sp500_return_pct'] = np.nan
-
-# correlation with sp500
-valid_mask = daily['daily_return_pct'].notna() & daily['sp500_return_pct'].notna()
-daily_returns_valid = daily.loc[valid_mask, 'daily_return_pct']
-sp500_returns_valid = daily.loc[valid_mask, 'sp500_return_pct']
-correlation_with_sp500 = daily_returns_valid.corr(sp500_returns_valid)
-
-
-# Rolling correlation (60-day window)
-window = 25
-if 'sp500_return_pct' in daily.columns and daily['sp500_return_pct'].notna().any():
-    daily['roll_corr_spx'] = daily['daily_return_pct'].rolling(window=window).corr(daily['sp500_return_pct'])
-else:
     daily['roll_corr_spx'] = np.nan
+    correlation_with_sp500 = np.nan
 
 # 1. NUMBER OF TRADES, win rate
 num_trades = len(df)
@@ -500,29 +568,55 @@ st.markdown('<div style="height: 60px;"></div>', unsafe_allow_html=True)  # Row 
 final_row_col1, final_row_col2 = st.columns(2, gap="large")
 
 with final_row_col1:
-    st.markdown("<h1 style='font-size: 24px; font-weight: bold;'>Bot vs S&P 500 Daily Returns Scatter</h1>", unsafe_allow_html=True)
-    # Filter to valid data points
-    scatter_mask = daily['daily_return_pct'].notna() & daily['sp500_return_pct'].notna()
-    scatter_data = daily.loc[scatter_mask]
+    if use_per_trade_sp500:
+        st.markdown("<h1 style='font-size: 24px; font-weight: bold;'>Bot vs S&P 500 Per-Trade Returns</h1>", unsafe_allow_html=True)
+        # Use per-trade SP500 comparison
+        scatter_mask = df['return_pct'].notna() & df['sp500_return_trade'].notna()
+        scatter_df = df.loc[scatter_mask]
+        
+        fig_scatter_sp500 = go.Figure()
+        fig_scatter_sp500.add_trace(go.Scatter(
+            x=scatter_df['sp500_return_trade'],
+            y=scatter_df['return_pct'],
+            mode='markers',
+            marker=dict(
+                size=6,
+                opacity=0.9,
+                color='#2E86AB'
+            ),
+            name='Trade Returns',
+            text=scatter_df['symbol'] if 'symbol' in scatter_df.columns else None,
+            hovertemplate='<b>%{text}</b><br>SP500: %{x:.2f}%<br>Trade: %{y:.2f}%<extra></extra>'
+        ))
+        xaxis_title = "S&P 500 Return (%) [Holding Period]"
+        yaxis_title = "Trade Return (%)"
+    else:
+        st.markdown("<h1 style='font-size: 24px; font-weight: bold;'>Bot vs S&P 500 Daily Returns Scatter</h1>", unsafe_allow_html=True)
+        # Filter to valid data points
+        scatter_mask = daily['daily_return_pct'].notna() & daily['sp500_return_pct'].notna()
+        scatter_data = daily.loc[scatter_mask]
+        
+        fig_scatter_sp500 = go.Figure()
+        fig_scatter_sp500.add_trace(go.Scatter(
+            x=scatter_data['sp500_return_pct'],
+            y=scatter_data['daily_return_pct'],
+            mode='markers',
+            marker=dict(
+                size=6,
+                opacity=0.9,
+                color='#2E86AB'
+            ),
+            name='Daily Returns'
+        ))
+        xaxis_title = "S&P 500 Daily Return (%)"
+        yaxis_title = "Bot Daily Return (%)"
     
-    fig_scatter_sp500 = go.Figure()
-    fig_scatter_sp500.add_trace(go.Scatter(
-        x=scatter_data['sp500_return_pct'],
-        y=scatter_data['daily_return_pct'],
-        mode='markers',
-        marker=dict(
-            size=6,
-            opacity=0.9,
-            color='#2E86AB'
-        ),
-        name='Daily Returns'
-    ))
     # Add reference lines at 0
     fig_scatter_sp500.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.5)
     fig_scatter_sp500.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.5)
     fig_scatter_sp500.update_layout(
-        xaxis=dict(title=dict(text="S&P 500 Daily Return (%)", font=dict(size=14)), tickfont=dict(size=12)),
-        yaxis=dict(title=dict(text="Bot Daily Return (%)", font=dict(size=14)), tickfont=dict(size=12)),
+        xaxis=dict(title=dict(text=xaxis_title, font=dict(size=14)), tickfont=dict(size=12)),
+        yaxis=dict(title=dict(text=yaxis_title, font=dict(size=14)), tickfont=dict(size=12)),
         height=320,
         margin=dict(l=20, r=20, t=10, b=10),
         font=dict(family="Times New Roman, Times, serif"),
@@ -531,7 +625,10 @@ with final_row_col1:
     st.plotly_chart(fig_scatter_sp500, use_container_width=True)
 
 with final_row_col2:
-    st.markdown("<h1 style='font-size: 24px; font-weight: bold;'>Rolling Correlation (25-day window)</h1>", unsafe_allow_html=True)
+    if use_per_trade_sp500:
+        st.markdown("<h1 style='font-size: 24px; font-weight: bold;'>Rolling Correlation (25-trade window)</h1>", unsafe_allow_html=True)
+    else:
+        st.markdown("<h1 style='font-size: 24px; font-weight: bold;'>Rolling Correlation (25-day window)</h1>", unsafe_allow_html=True)
     # Filter to valid rolling correlation data
     roll_corr_mask = daily['roll_corr_spx'].notna()
     roll_corr_data = daily.loc[roll_corr_mask]
@@ -542,7 +639,7 @@ with final_row_col2:
         y=roll_corr_data['roll_corr_spx'],
         mode='lines',
         line=dict(color='#A23B72', width=2),
-        name='60-day Rolling Correlation'
+        name='Rolling Correlation'
     ))
     # Add reference line at 0
     fig_roll_corr.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.5)
