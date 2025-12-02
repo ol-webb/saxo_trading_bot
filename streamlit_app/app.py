@@ -531,7 +531,7 @@ with final_row_col1:
     st.plotly_chart(fig_scatter_sp500, use_container_width=True)
 
 with final_row_col2:
-    st.markdown("<h1 style='font-size: 24px; font-weight: bold;'>Rolling Correlation (60-day window)</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='font-size: 24px; font-weight: bold;'>Rolling Correlation (25-day window)</h1>", unsafe_allow_html=True)
     # Filter to valid rolling correlation data
     roll_corr_mask = daily['roll_corr_spx'].notna()
     roll_corr_data = daily.loc[roll_corr_mask]
