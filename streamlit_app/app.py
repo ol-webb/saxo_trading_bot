@@ -243,13 +243,16 @@ st.markdown("### Performance Metrics")
 st.markdown("""
 Paper trading accounts allocate large amounts of capital (usually ~\$1M), but deployed capital is much smaller than total bankroll, and position sizing is essentially constant relative to total bankroll. Hence, no well defined equity curve exists. As such, calculating annualised returns is not meaningful. We approximate Sharpe in two ways:
 """)
-st.latex(r"\text{Sharpe}_{\text{dollar}} = \frac{\bar{PnL}_d}{\sigma(PnL_d)} \times \sqrt{252}")
+
+eq_col1, eq_col2 = st.columns(2)
+with eq_col1:
+    st.latex(r"\text{Sharpe}_{\text{dollar}} = \frac{\bar{P}_d}{\sigma(P_d)} \times \sqrt{252}")
+with eq_col2:
+    st.latex(r"\text{Sharpe}_{\text{capital}} = \frac{\bar{r}_d}{\sigma(r_d)} \times \sqrt{252}")
+
 st.markdown("""
-where $PnL_d$ is the daily P&L in dollars, and secondly:
-""")
-st.latex(r"\text{Sharpe}_{\text{capital}} = \frac{\bar{r}_d}{\sigma(r_d)} \times \sqrt{252}, \quad r_d = \frac{E_d - E_{d-1}}{E_{d-1}}")
-st.markdown("""
-where $E_d$ is the equity on day $d$, computed using an assumed initial capital.
+where $P_d$ is the P&L on day $d$ (in dollars), $\\bar{P}_d$ is the mean daily P&L, $\\sigma(P_d)$ is the standard deviation of daily P&L, 
+$r_d = (E_d - E_{d-1}) / E_{d-1}$ is the daily return, and $E_d$ is the equity on day $d$ computed using an assumed initial capital.
 """)
 
 
