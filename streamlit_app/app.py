@@ -61,7 +61,7 @@ st.markdown('<p class="main-title">Systematic Trading Algorithm Performance Anal
 st.markdown('<p class="author">Oliver Webb - 2025-12-01</p>', unsafe_allow_html=True)
 
 st.markdown("### About This Dashboard")
-st.markdown("I developed a trading algorithm, the results of which are displayed here. A complete end to end build, I started running it on Interactive Brokers in July 2025. Changes have been made since; most recently: I have moved brokers to Alpaca - as they offer a more flexible API for headless trading."
+st.markdown("I developed a trading algorithm, the results of which are displayed here. A complete end to end build, I started running it on Interactive Brokers in July 2025. Changes have been made since; most recently: I have moved brokers to Alpaca - as they offer a more flexible API for headless trading.")
 
 st.markdown("Below are the results for the few months of trading with IBKR, and the short while it has been running with Alpaca.")
 
