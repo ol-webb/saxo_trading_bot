@@ -62,17 +62,10 @@ st.markdown('<p class="author">Oliver Webb - 2025-12-01</p>', unsafe_allow_html=
 
 st.markdown("### About This Dashboard")
 st.markdown("I developed a trading algorithm, the results of which are displayed here. A complete end to end build, I started running it on Interactive Brokers in July 2025. Changes have been made since; most recently: I have moved brokers to Alpaca - as they offer a more flexible API for headless trading.")
+st.markdown("So far this is all paper trading, with no real money at stake.")
 
-st.markdown("Below are the results for the few months of trading with IBKR, and the short while it has been running with Alpaca.")
+st.markdown("You can select which results to view: the few months of trading with IBKR, and the short while it has been running with Alpaca.")
 
-st.markdown("""
-<div class="justified-text">
-Use dropdown, below, to select broker:  
-  
-- IBKR has more trades.  
-- Bot is running using Alpaca now, so more data will appear in future.
-</div>
-""", unsafe_allow_html=True)
 
 
 def get_sp500_return_for_trade(row):
@@ -248,12 +241,17 @@ st.markdown("---")
 # SECTION 1: Hero Metrics
 st.markdown("### Performance Metrics")
 st.markdown("""
-No well defined equity curve exists, because capital deployed is much smaller than total bankroll, hence:  
-- Sharpe is calculated firstly using dollar pnl, and secondly with assumptions on capital deployed.  
-- Annualised returns are not calculated.
+Paper trading accounts allocate large amounts of capital (usually ~\$1M), but deployed capital is much smaller than total bankroll, and position sizing is essentially constant relative to total bankroll. Hence, no well defined equity curve exists. As such, calculating annualised returns is not meaningful. We approximate Sharpe in two ways:
+""")
+st.latex(r"\text{Sharpe}_{\text{dollar}} = \frac{\bar{PnL}_d}{\sigma(PnL_d)} \times \sqrt{252}")
+st.markdown("""
+where $PnL_d$ is the daily P&L in dollars, and secondly:
+""")
+st.latex(r"\text{Sharpe}_{\text{capital}} = \frac{\bar{r}_d}{\sigma(r_d)} \times \sqrt{252}, \quad r_d = \frac{E_d - E_{d-1}}{E_{d-1}}")
+st.markdown("""
+where $E_d$ is the equity on day $d$, computed using an assumed initial capital.
 """)
 
-# Paper trading has been done with a large bankroll, and mostly fixed position sizing, with capital deployed much smaller than the total capital available. Given this, annualised returns and traditional Sharpe are not well-defined given no equity curve exists. The Sharpe approximations below are calculated firstly using a dollar pnl (rather than % return), and secondly making an approximation on capital deployed.
 
 
 col1, col2, col3, col4 = st.columns(4)
