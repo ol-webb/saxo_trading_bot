@@ -64,7 +64,7 @@ st.markdown("### About This Dashboard")
 st.markdown("I developed a trading algorithm, the results of which are displayed here. A complete end to end build, I started running it on Interactive Brokers in July 2025. Changes have been made since; most recently: I have moved brokers to Alpaca - as they offer a more flexible API for headless trading.")
 st.markdown("So far this is all paper trading, with no real money at stake.")
 
-st.markdown("You can select which results to view: the few months of trading with IBKR, and the short while it has been running with Alpaca.")
+st.markdown("You can select which results to view: the few months of trading with IBKR, or the recent results while it has been running with Alpaca.")
 
 
 
@@ -574,7 +574,7 @@ with final_row_col1:
     fig_scatter_sp500.add_hline(y=0, line_dash="dash", line_color="black", opacity=0.5)
     fig_scatter_sp500.add_vline(x=0, line_dash="dash", line_color="black", opacity=0.5)
     fig_scatter_sp500.update_layout(
-        xaxis=dict(title=dict(text="S&P 500 Return (%) [Holding Period]", font=dict(size=14)), tickfont=dict(size=12)),
+        xaxis=dict(title=dict(text="S&P 500 Return (%)", font=dict(size=14)), tickfont=dict(size=12)),
         yaxis=dict(title=dict(text="Trade Return (%)", font=dict(size=14)), tickfont=dict(size=12)),
         height=320,
         margin=dict(l=20, r=20, t=10, b=10),
